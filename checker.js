@@ -7,8 +7,6 @@ import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
 import authorize from './authorize.js';
 
-const gmail = google.gmail('v1');
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -17,6 +15,8 @@ const FUNC_MAP = {
     'HAS': has
 }
 
+authorize();
+let counter = 1;
 const task = cron.schedule('* * * * *', async () => {
     const fixture = path.join(__dirname, 'config.ini');
     const info = readIniFileSync(fixture);
@@ -26,9 +26,13 @@ const task = cron.schedule('* * * * *', async () => {
     const root = parse(data);
     const targets = root.querySelectorAll(info.site.target);
     let contexts = Array.prototype.slice.call(targets)
-        .filter(e => decodeURIComponent(e.innerHTML.replace(/(\&nbsp;| |\r|\n)/g, '')).length)
+        .filter(e => {
+            const content = (e?.innerHTML || e?.innerText || '').replace(/(\&nbsp;| |\r|\n)/g, '');
+            return content.length;
+        })
         .map(e => e.innerHTML);
     const conditions = Object.values(info.condition).map(e => e.split(' '));
+
     conditions.forEach(con => {
         const [conType, text] = con;
         const filterFunction = FUNC_MAP[conType];
@@ -38,6 +42,8 @@ const task = cron.schedule('* * * * *', async () => {
     if (contexts.length) {
         authorize().then((auth) => sendMail(auth, info, contexts)).catch(console.error);
         task.stop();
+    } else {
+        process.stdout.write("\r(" + counter++ + ") continue to next detecting.");
     }
 });
 
